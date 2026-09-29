@@ -47,13 +47,14 @@ export function createUnoDeck(): UnoCard[] {
    * CARTAS NUMÉRICAS
    *
    * Cada cor:
+   *
    * 1x zero
    * 2x 1–9
    */
   for (const color of UNO_COLORS) {
     deck.push(createNumberCard(color, 0, 0));
 
-    for (let value = 1; value <= 9; value++) {
+    for (let value = 1; value <= 9; value += 1) {
       deck.push(createNumberCard(color, value, 1));
 
       deck.push(createNumberCard(color, value, 2));
@@ -63,17 +64,14 @@ export function createUnoDeck(): UnoCard[] {
   /*
    * CARTAS ESPECIAIS
    *
-   * Cada cor recebe:
+   * Cada cor:
    *
    * 2 Skip
    * 2 Reverse
    * 2 +2
-   *
-   * O +4 é tratado como carta especial
-   * universal e será adicionado abaixo.
    */
   for (const color of UNO_COLORS) {
-    for (let copy = 1; copy <= 2; copy++) {
+    for (let copy = 1; copy <= 2; copy += 1) {
       deck.push(createSpecialCard(color, "skip", copy));
 
       deck.push(createSpecialCard(color, "reverse", copy));
@@ -85,16 +83,9 @@ export function createUnoDeck(): UnoCard[] {
   /*
    * +4
    *
-   * Não possui cor específica.
-   *
-   * Como UnoCard.color atualmente exige
-   * uma cor, usamos "blue" internamente
-   * apenas como valor técnico.
-   *
-   * A lógica visual poderá tratar +4
-   * separadamente.
+   * 4 cartas universais.
    */
-  for (let copy = 1; copy <= 4; copy++) {
+  for (let copy = 1; copy <= 4; copy += 1) {
     deck.push({
       id: `wildDraw4-${copy}`,
       color: null,
@@ -104,13 +95,32 @@ export function createUnoDeck(): UnoCard[] {
     });
   }
 
+  /*
+   * TROCA DE COR
+   *
+   * 4 cartas universais.
+   *
+   * No UNO CHESS ela permite trocar uma peça própria
+   * com a peça inimiga não-Rei mais avançada
+   * que esteja dentro da visão do jogador.
+   */
+  for (let copy = 1; copy <= 4; copy += 1) {
+    deck.push({
+      id: `colorSwap-${copy}`,
+      color: null,
+      type: "colorSwap",
+      value: null,
+      recoveryAmount: 0,
+    });
+  }
+
   return shuffleDeck(deck);
 }
 
 export function shuffleDeck(deck: UnoCard[]): UnoCard[] {
   const shuffled = [...deck];
 
-  for (let i = shuffled.length - 1; i > 0; i--) {
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
 
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];

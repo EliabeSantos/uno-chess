@@ -8,6 +8,7 @@ interface GameUIProps {
   game: GameState;
   onEndTurn: () => void;
   onRecoveryPiece: (pieceId: string) => void;
+  onActivateColorSwap: () => void;
 }
 
 function getPieceSymbol(piece: Piece): string {
@@ -26,7 +27,7 @@ function getPieceSymbol(piece: Piece): string {
       queen: "♛",
       rook: "♜",
       bishop: "♝",
-      knight: "♝",
+      knight: "♞",
       pawn: "♟",
     },
   };
@@ -72,6 +73,7 @@ export default function GameUI({
   game,
   onEndTurn,
   onRecoveryPiece,
+  onActivateColorSwap,
 }: GameUIProps) {
   const currentPlayer = game.currentPlayer;
 
@@ -92,8 +94,12 @@ export default function GameUI({
 
   const recoveryUnavailable = game.pendingRecovery > 0 && !hasRecoverablePieces;
 
+  const colorSwapFinished = !game.pendingColorSwap;
+
   const canEndTurn =
-    movementFinished && (recoveryFinished || recoveryUnavailable);
+    movementFinished &&
+    (recoveryFinished || recoveryUnavailable) &&
+    colorSwapFinished;
 
   const whiteKings = game.board
     .flat()
@@ -110,6 +116,16 @@ export default function GameUI({
     ).length;
 
   const unoCard = game.currentUnoCard;
+
+  const ownPieces = game.board
+    .flat()
+    .map((square) => square.piece)
+    .filter(
+      (piece): piece is Piece =>
+        Boolean(piece) &&
+        piece.color === game.currentPlayer &&
+        piece.type !== "king",
+    );
 
   return (
     <aside className="space-y-4">
@@ -231,7 +247,9 @@ export default function GameUI({
                       ? "↻"
                       : unoCard.type === "draw2"
                         ? "+2"
-                        : "+4"}
+                        : unoCard.type === "wildDraw4"
+                          ? "+4"
+                          : "⇄"}
               </span>
             </div>
 
@@ -245,7 +263,9 @@ export default function GameUI({
                       ? "REVERSE"
                       : unoCard.type === "draw2"
                         ? "RECUPERAÇÃO +2"
-                        : "RECUPERAÇÃO +4"}
+                        : unoCard.type === "wildDraw4"
+                          ? "RECUPERAÇÃO +4"
+                          : "TROCA DE COR"}
               </p>
 
               <p className="mt-1 text-xs text-zinc-500">Carta atual</p>
@@ -254,7 +274,96 @@ export default function GameUI({
         ) : (
           <p className="mt-3 text-sm text-zinc-500">Nenhuma carta.</p>
         )}
+
+        {/* ================================== */}
+        {/* ATIVAR TROCA DE COR */}
+        {/* ================================== */}
+
+        {unoCard?.type === "colorSwap" &&
+          !game.pendingColorSwap &&
+          !game.gameOver && (
+            <button
+              type="button"
+              onClick={onActivateColorSwap}
+              className="mt-4 w-full rounded-xl border border-purple-500/50 bg-purple-600/20 px-4 py-3 font-black text-purple-200 transition hover:bg-purple-600/40"
+            >
+              ⇄ ATIVAR TROCA DE COR
+            </button>
+          )}
       </section>
+
+      {/* ================================== */}
+      {/* TROCA DE COR */}
+      {/* ================================== */}
+
+      {game.pendingColorSwap && (
+        <section className="rounded-2xl border border-purple-500/50 bg-purple-950/30 p-4 shadow-xl">
+          <p className="text-xs font-black tracking-[0.2em] text-purple-400">
+            TROCA DE COR
+          </p>
+
+          <p className="mt-2 text-sm text-purple-200">
+            Escolha uma peça sua para trocar com a peça inimiga mais avançada
+            que você consegue enxergar.
+          </p>
+
+          {game.colorSwapTarget && (
+            <div className="mt-3 rounded-xl bg-black/30 p-3 text-center">
+              <p className="text-xs font-bold text-zinc-500">ALVO</p>
+
+              <p className="mt-1 text-5xl">
+                {(() => {
+                  const piece =
+                    game.board[game.colorSwapTarget!.row][
+                      game.colorSwapTarget!.col
+                    ].piece;
+
+                  return piece ? getPieceSymbol(piece) : "?";
+                })()}
+              </p>
+
+              <p className="mt-2 text-xs text-zinc-500">
+                Escolha uma peça abaixo ou clique nela no tabuleiro.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {ownPieces.map((piece) => (
+              <button
+                key={piece.id}
+                type="button"
+                onClick={() => {
+                  /*
+                   * A seleção pelo painel é feita
+                   * através do mesmo mecanismo usado
+                   * pelo tabuleiro.
+                   */
+                  const position = game.board
+                    .flatMap((row) => row)
+                    .find((square) => square.piece?.id === piece.id);
+
+                  if (!position) {
+                    return;
+                  }
+
+                  /*
+                   * Este callback é tratado pelo
+                   * page.tsx.
+                   */
+                }}
+                className="rounded-lg border border-purple-900 bg-black/20 p-3 text-3xl transition hover:border-purple-400 hover:bg-purple-500/20"
+              >
+                {getPieceSymbol(piece)}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-3 text-center text-xs font-bold text-purple-300">
+            Clique na peça desejada no tabuleiro para realizar a troca.
+          </p>
+        </section>
+      )}
 
       {/* ================================== */}
       {/* MOVIMENTOS */}

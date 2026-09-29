@@ -17,6 +17,8 @@ import { getValidMoves } from "./movement";
 
 import { getKingPositions, isKingInCheck } from "./check";
 
+import { getVisiblePositions } from "./fog";
+
 // ========================================
 // BOARD HELPERS
 // ========================================
@@ -57,6 +59,9 @@ function getMovesAllowedFromCard(card: UnoCard | null): number {
       return 1;
 
     case "wildDraw4":
+      return 1;
+
+    case "colorSwap":
       return 1;
 
     default:
@@ -172,6 +177,10 @@ function createStateFromInitialCard(
 
     recoveryPieceId: null,
 
+    pendingColorSwap: card?.type === "colorSwap",
+
+    colorSwapTarget: null,
+
     gameOver: false,
 
     winner: null,
@@ -193,6 +202,10 @@ function canMakeMove(game: GameState): boolean {
     return false;
   }
 
+  if (game.pendingColorSwap) {
+    return false;
+  }
+
   if (game.movesUsed >= game.movesAllowed) {
     return false;
   }
@@ -207,6 +220,10 @@ export function selectSquare(game: GameState, position: Position): GameState {
 
   if (game.pendingPromotion) {
     return game;
+  }
+
+  if (game.pendingColorSwap) {
+    return selectColorSwapPiece(game, position);
   }
 
   if (game.recoveryPieceId) {
@@ -603,6 +620,244 @@ function recoverPieceToSquare(game: GameState, target: Position): GameState {
 }
 
 // ========================================
+// COLOR SWAP
+// ========================================
+
+function isPositionEqual(a: Position, b: Position): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
+/**
+ * Determina qual peça inimiga é a mais avançada.
+ *
+ * White:
+ * quanto menor a row, mais avançada.
+ *
+ * Black:
+ * quanto maior a row, mais avançada.
+ *
+ * Reis são ignorados.
+ *
+ * Apenas peças dentro da visão do jogador
+ * podem ser consideradas.
+ */
+function findMostAdvancedEnemyPiece(game: GameState): Position | null {
+  const enemyColor = getOppositeColor(game.currentPlayer);
+
+  const visiblePositions = getVisiblePositions(game, game.currentPlayer);
+
+  let bestPosition: Position | null = null;
+
+  let bestProgress = -Infinity;
+
+  for (let row = 0; row < game.boardSize; row += 1) {
+    for (let col = 0; col < game.boardSize; col += 1) {
+      const piece = game.board[row][col].piece;
+
+      if (!piece) {
+        continue;
+      }
+
+      if (piece.color !== enemyColor) {
+        continue;
+      }
+
+      if (piece.type === "king") {
+        continue;
+      }
+
+      const position = {
+        row,
+        col,
+      };
+
+      if (!visiblePositions.has(`${row}:${col}`)) {
+        continue;
+      }
+
+      /*
+       * White avança em direção à row 0.
+       * Black avança em direção à última row.
+       */
+      const progress = enemyColor === "white" ? game.boardSize - 1 - row : row;
+
+      if (progress > bestProgress) {
+        bestProgress = progress;
+
+        bestPosition = position;
+      }
+    }
+  }
+
+  return bestPosition;
+}
+
+/**
+ * Ativa a carta Troca de Cor.
+ *
+ * A peça inimiga é identificada automaticamente.
+ */
+export function activateColorSwap(game: GameState): GameState {
+  if (game.gameOver) {
+    return game;
+  }
+
+  if (game.currentUnoCard?.type !== "colorSwap") {
+    return game;
+  }
+
+  if (game.pendingColorSwap) {
+    return game;
+  }
+
+  const target = findMostAdvancedEnemyPiece(game);
+
+  if (!target) {
+    return game;
+  }
+
+  return {
+    ...game,
+
+    pendingColorSwap: true,
+
+    colorSwapTarget: target,
+
+    selectedSquare: null,
+
+    validMoves: [],
+  };
+}
+
+/**
+ * Seleciona a peça própria que será usada
+ * na Troca de Cor.
+ */
+export function selectColorSwapPiece(
+  game: GameState,
+  position: Position,
+): GameState {
+  if (!game.pendingColorSwap) {
+    return game;
+  }
+
+  if (!game.colorSwapTarget) {
+    return {
+      ...game,
+      pendingColorSwap: false,
+    };
+  }
+
+  const selectedPiece = game.board[position.row]?.[position.col]?.piece;
+
+  if (!selectedPiece) {
+    return game;
+  }
+
+  if (selectedPiece.color !== game.currentPlayer) {
+    return game;
+  }
+
+  /*
+   * O alvo da troca nunca pode ser o próprio Rei,
+   * e a peça escolhida também não pode ser o Rei.
+   */
+  if (selectedPiece.type === "king") {
+    return game;
+  }
+
+  return executeColorSwap(game, position);
+}
+
+/**
+ * Executa a troca das duas peças.
+ */
+function executeColorSwap(
+  game: GameState,
+  ownPiecePosition: Position,
+): GameState {
+  if (!game.colorSwapTarget) {
+    return game;
+  }
+
+  const target = game.colorSwapTarget;
+
+  const ownPiece =
+    game.board[ownPiecePosition.row]?.[ownPiecePosition.col]?.piece;
+
+  const enemyPiece = game.board[target.row]?.[target.col]?.piece;
+
+  if (!ownPiece) {
+    return game;
+  }
+
+  if (!enemyPiece) {
+    return {
+      ...game,
+      pendingColorSwap: false,
+      colorSwapTarget: null,
+    };
+  }
+
+  if (ownPiece.color !== game.currentPlayer) {
+    return game;
+  }
+
+  if (enemyPiece.color === game.currentPlayer) {
+    return game;
+  }
+
+  if (ownPiece.type === "king" || enemyPiece.type === "king") {
+    return game;
+  }
+
+  const newBoard = cloneBoard(game.board);
+
+  newBoard[ownPiecePosition.row][ownPiecePosition.col].piece = {
+    ...enemyPiece,
+  };
+
+  newBoard[target.row][target.col].piece = {
+    ...ownPiece,
+  };
+
+  const nextGame: GameState = {
+    ...game,
+
+    board: newBoard,
+
+    pendingColorSwap: false,
+
+    colorSwapTarget: null,
+
+    selectedSquare: null,
+
+    validMoves: [],
+  };
+
+  /*
+   * A troca pode colocar um Rei adversário em
+   * situação diferente, mas não move Reis.
+   *
+   * Vitória continua sendo baseada na existência
+   * dos três Reis.
+   */
+  const enemyColor = getOppositeColor(game.currentPlayer);
+
+  const enemyKings = getKingPositions(nextGame, enemyColor);
+
+  if (enemyKings.length === 0) {
+    return {
+      ...nextGame,
+      gameOver: true,
+      winner: game.currentPlayer,
+    };
+  }
+
+  return nextGame;
+}
+
+// ========================================
 // DRAW NEXT UNO CARD
 // ========================================
 
@@ -639,6 +894,10 @@ function drawNextUnoCard(
       pendingRecovery: 0,
 
       recoveryPieceId: null,
+
+      pendingColorSwap: false,
+
+      colorSwapTarget: null,
     };
   }
 
@@ -683,6 +942,10 @@ function drawNextUnoCard(
 
       recoveryPieceId: null,
 
+      pendingColorSwap: false,
+
+      colorSwapTarget: null,
+
       pendingPromotion: null,
     };
 
@@ -718,6 +981,10 @@ function drawNextUnoCard(
 
     recoveryPieceId: null,
 
+    pendingColorSwap: false,
+
+    colorSwapTarget: null,
+
     pendingPromotion: null,
   };
 }
@@ -732,6 +999,10 @@ export function switchTurn(game: GameState): GameState {
   }
 
   if (game.pendingPromotion) {
+    return game;
+  }
+
+  if (game.pendingColorSwap) {
     return game;
   }
 

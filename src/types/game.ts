@@ -26,13 +26,15 @@ export interface Square {
   piece: Piece | null;
 }
 
-// ========================================
-// UNO
-// ========================================
-
 export type UnoColor = "red" | "yellow" | "green" | "blue";
 
-export type UnoCardType = "number" | "skip" | "reverse" | "draw2" | "wildDraw4";
+export type UnoCardType =
+  | "number"
+  | "skip"
+  | "reverse"
+  | "draw2"
+  | "wildDraw4"
+  | "colorSwap";
 
 export interface UnoCard {
   id: string;
@@ -42,21 +44,11 @@ export interface UnoCard {
   recoveryAmount: number;
 }
 
-// ========================================
-// BOARD SIZE
-// ========================================
-
 export type BoardSize = 8 | 16 | 24;
-
 export type BoardLayout = 1 | 2 | 3;
-
-// ========================================
-// GAME STATE
-// ========================================
 
 export interface GameState {
   board: Square[][];
-
   boardSize: BoardSize;
   boardLayout: BoardLayout;
 
@@ -79,10 +71,22 @@ export interface GameState {
   boardReversed: boolean;
 
   pendingRecovery: number;
-
   recoverySelection: Piece[];
-
   recoveryPieceId: string | null;
+
+  /*
+   * TROCA DE COR
+   *
+   * Quando true, o jogador precisa escolher
+   * uma peça própria para realizar a troca.
+   */
+  pendingColorSwap: boolean;
+
+  /*
+   * Posição da peça inimiga escolhida automaticamente
+   * pela carta Troca de Cor.
+   */
+  colorSwapTarget: Position | null;
 
   gameOver: boolean;
   winner: PieceColor | null;

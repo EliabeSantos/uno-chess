@@ -383,7 +383,19 @@ export default function Home() {
       setGame(nextGame);
     }
   }
+  const handleActivateColorSwap = () => {
+    const nextGame = activateColorSwap(game);
 
+    if (nextGame === game) {
+      return;
+    }
+
+    setGame(nextGame);
+
+    if (online && room) {
+      void updateGameRoomState(room.id, nextGame);
+    }
+  };
   function handlePromotion(type: Exclude<PieceType, "king" | "pawn">) {
     if (!game) {
       return;
@@ -681,6 +693,7 @@ export default function Home() {
             game={game}
             onEndTurn={handleEndTurn}
             onRecoveryPiece={handleRecoveryPiece}
+            onActivateColorSwap={handleActivateColorSwap}
           />
         </div>
       </div>
