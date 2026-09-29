@@ -1,311 +1,180 @@
 "use client";
 
-import { useRef, useState } from "react";
-
 import { GameState, Position } from "@/types/game";
 
-import { getCheckedKings } from "@/game/check";
-
 import ChessSquare from "./ChessSquare";
+
+import { isKingInCheck } from "@/game/check";
 
 interface ChessBoardProps {
   game: GameState;
   onSquareClick: (position: Position) => void;
 }
 
-const BOARD_SIZE = 24;
-const SQUARE_SIZE = 48;
+function isRecoverySquare(game: GameState, row: number, col: number): boolean {
+  if (game.pendingRecovery <= 0 || !game.recoveryPieceId) {
+    return false;
+  }
+
+  const isStartingRow =
+    game.currentPlayer === "white"
+      ? row === game.boardSize - 1 || row === game.boardSize - 2
+      : row === 0 || row === 1;
+
+  if (!isStartingRow) {
+    return false;
+  }
+
+  return game.board[row][col].piece === null;
+}
+
+function getSector(col: number): number {
+  return Math.floor(col / 8);
+}
+
+function getSectorLabel(sector: number): string {
+  switch (sector) {
+    case 0:
+      return "SETOR I";
+
+    case 1:
+      return "SETOR II";
+
+    case 2:
+      return "SETOR III";
+
+    default:
+      return "";
+  }
+}
 
 export default function ChessBoard({ game, onSquareClick }: ChessBoardProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const boardSize = game.boardSize;
 
-  const [zoom, setZoom] = useState(1);
-
-  const [offset, setOffset] = useState({
-    x: 0,
-    y: 0,
-  });
-
-  const [dragging, setDragging] = useState(false);
-
-  const dragStart = useRef({
-    x: 0,
-    y: 0,
-    offsetX: 0,
-    offsetY: 0,
-  });
-
-  const checkedKings = [
-    ...getCheckedKings(game, "white"),
-    ...getCheckedKings(game, "black"),
-  ];
-
-  function isKingInCheck(position: Position): boolean {
-    return checkedKings.some(
-      (king) => king.row === position.row && king.col === position.col,
-    );
-  }
-
-  // ========================================
-  // ZOOM
-  // ========================================
-
-  function handleWheel(event: React.WheelEvent) {
-    event.preventDefault();
-
-    const zoomChange = event.deltaY > 0 ? -0.1 : 0.1;
-
-    setZoom((currentZoom) =>
-      Math.min(2, Math.max(0.5, Number((currentZoom + zoomChange).toFixed(2)))),
-    );
-  }
-
-  function zoomIn() {
-    setZoom((currentZoom) =>
-      Math.min(2, Number((currentZoom + 0.1).toFixed(2))),
-    );
-  }
-
-  function zoomOut() {
-    setZoom((currentZoom) =>
-      Math.max(0.5, Number((currentZoom - 0.1).toFixed(2))),
-    );
-  }
-
-  function resetView() {
-    setZoom(1);
-
-    setOffset({
-      x: 0,
-      y: 0,
-    });
-  }
-
-  // ========================================
-  // ARRASTAR TABULEIRO
-  // ========================================
-
-  function handleMouseDown(event: React.MouseEvent) {
-    if (event.button !== 0) {
-      return;
-    }
-
-    setDragging(true);
-
-    dragStart.current = {
-      x: event.clientX,
-      y: event.clientY,
-      offsetX: offset.x,
-      offsetY: offset.y,
-    };
-  }
-
-  function handleMouseMove(event: React.MouseEvent) {
-    if (!dragging) {
-      return;
-    }
-
-    const deltaX = event.clientX - dragStart.current.x;
-
-    const deltaY = event.clientY - dragStart.current.y;
-
-    setOffset({
-      x: dragStart.current.offsetX + deltaX,
-
-      y: dragStart.current.offsetY + deltaY,
-    });
-  }
-
-  function handleMouseUp() {
-    setDragging(false);
-  }
-
-  // ========================================
-  // RENDERIZAÇÃO DO TABULEIRO
-  // ========================================
-
-  /*
-   * Importante:
-   *
-   * O board real nunca é alterado.
-   *
-   * Apenas mudamos a ordem visual
-   * das casas.
-   */
-
-  const displayRows = Array.from(
-    {
-      length: BOARD_SIZE,
-    },
-    (_, index) => index,
-  );
-
-  const displayCols = Array.from(
-    {
-      length: BOARD_SIZE,
-    },
-    (_, index) => index,
-  );
-
-  if (game.boardReversed) {
-    displayRows.reverse();
-    displayCols.reverse();
-  }
+  const showSectorLabels = boardSize >= 16;
 
   return (
-    <div className="relative h-[75vh] min-h-[500px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-      {/* CONTROLES */}
-
-      <div className="absolute right-4 top-4 z-20 flex overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
-        <button
-          type="button"
-          onClick={zoomOut}
-          className="px-4 py-2 text-lg font-bold text-white transition hover:bg-zinc-800"
-        >
-          −
-        </button>
-
-        <div className="flex min-w-[60px] items-center justify-center border-x border-zinc-700 px-2 text-sm text-zinc-300">
-          {Math.round(zoom * 100)}%
-        </div>
-
-        <button
-          type="button"
-          onClick={zoomIn}
-          className="px-4 py-2 text-lg font-bold text-white transition hover:bg-zinc-800"
-        >
-          +
-        </button>
-
-        <button
-          type="button"
-          onClick={resetView}
-          className="border-l border-zinc-700 px-3 text-xs font-bold text-zinc-300 transition hover:bg-zinc-800"
-        >
-          RESET
-        </button>
-      </div>
-
-      {/* INDICADOR REVERSE */}
-
+    <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 p-2 shadow-2xl">
       {game.boardReversed && (
-        <div className="pointer-events-none absolute left-4 top-4 z-20 rounded-lg border border-purple-500/50 bg-purple-950/90 px-4 py-2 shadow-xl">
-          <p className="text-xs font-black tracking-widest text-purple-400">
-            REVERSE
-          </p>
-
-          <p className="mt-1 text-xs text-purple-200">Tabuleiro invertido</p>
+        <div className="absolute left-4 top-4 z-30 rounded-lg border border-purple-400/40 bg-purple-950/90 px-3 py-2 text-xs font-black tracking-[0.2em] text-purple-300 shadow-lg">
+          REVERSE
         </div>
       )}
 
-      {/* ÁREA DE ARRASTE */}
+      {game.recoveryPieceId && (
+        <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border border-cyan-300/50 bg-cyan-950/95 px-4 py-2 text-xs font-black tracking-[0.15em] text-cyan-200 shadow-lg">
+          RECUPERAÇÃO — ESCOLHA UMA CASA
+        </div>
+      )}
 
       <div
-        ref={containerRef}
-        className={`
-          h-full
-          w-full
-          ${dragging ? "cursor-grabbing" : "cursor-grab"}
-        `}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        className="relative grid aspect-square w-full"
+        style={{
+          gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
+        }}
       >
-        {/* TABULEIRO */}
-
-        <div
-          className="absolute left-1/2 top-1/2"
-          style={{
-            width: BOARD_SIZE * SQUARE_SIZE,
-
-            transform: `translate(
-              calc(-50% + ${offset.x}px),
-              calc(-50% + ${offset.y}px)
-            ) scale(${zoom})`,
-
-            transformOrigin: "center center",
-          }}
-        >
-          <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `repeat(${BOARD_SIZE}, ${SQUARE_SIZE}px)`,
-
-              width: BOARD_SIZE * SQUARE_SIZE,
-            }}
-          >
-            {displayRows.flatMap((displayRow) =>
-              displayCols.map((displayCol) => {
-                /*
-                 * displayRow/displayCol
-                 * são posições visuais.
-                 *
-                 * actualRow/actualCol
-                 * são as coordenadas reais.
-                 */
-
+        {Array.from(
+          {
+            length: boardSize,
+          },
+          (_, visualRow) =>
+            Array.from(
+              {
+                length: boardSize,
+              },
+              (_, visualCol) => {
                 const actualRow = game.boardReversed
-                  ? BOARD_SIZE - 1 - displayRow
-                  : displayRow;
+                  ? boardSize - 1 - visualRow
+                  : visualRow;
 
                 const actualCol = game.boardReversed
-                  ? BOARD_SIZE - 1 - displayCol
-                  : displayCol;
+                  ? boardSize - 1 - visualCol
+                  : visualCol;
 
                 const square = game.board[actualRow][actualCol];
+
+                const selected = Boolean(
+                  game.selectedSquare &&
+                  game.selectedSquare.row === actualRow &&
+                  game.selectedSquare.col === actualCol,
+                );
 
                 const validMove = game.validMoves.some(
                   (move) => move.row === actualRow && move.col === actualCol,
                 );
 
-                const inCheck = isKingInCheck({
-                  row: actualRow,
-                  col: actualCol,
-                });
+                const recoveryTarget = isRecoverySquare(
+                  game,
+                  actualRow,
+                  actualCol,
+                );
 
-                const selected =
-                  game.selectedSquare?.row === actualRow &&
-                  game.selectedSquare?.col === actualCol;
+                const piece = square.piece;
+
+                const inCheck =
+                  piece?.type === "king" &&
+                  isKingInCheck(game, {
+                    row: actualRow,
+                    col: actualCol,
+                  });
+
+                const sector = getSector(actualCol);
+
+                const isSectorBoundary =
+                  showSectorLabels &&
+                  (actualCol === 8 || actualCol === 16) &&
+                  actualCol < boardSize;
+
+                const isRowBoundary =
+                  showSectorLabels &&
+                  (actualRow === 8 || actualRow === 16) &&
+                  actualRow < boardSize;
 
                 return (
-                  <ChessSquare
+                  <div
                     key={`${actualRow}-${actualCol}`}
-                    row={actualRow}
-                    col={actualCol}
-                    piece={square.piece}
-                    selected={selected}
-                    validMove={validMove}
-                    inCheck={inCheck}
-                    onClick={onSquareClick}
-                  />
+                    className={`
+                      relative
+                      ${isSectorBoundary ? "border-l-2 border-zinc-950" : ""}
+                      ${isRowBoundary ? "border-t-2 border-zinc-950" : ""}
+                    `}
+                  >
+                    <ChessSquare
+                      row={actualRow}
+                      col={actualCol}
+                      piece={piece}
+                      selected={selected}
+                      validMove={validMove}
+                      recoveryTarget={recoveryTarget}
+                      inCheck={inCheck}
+                      onClick={onSquareClick}
+                    />
+
+                    {showSectorLabels &&
+                      actualRow === boardSize - 1 &&
+                      actualCol % 8 === 0 && (
+                        <div className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-black/50 px-1 py-0.5 text-[7px] font-black tracking-widest text-white/60">
+                          {getSectorLabel(sector)}
+                        </div>
+                      )}
+                  </div>
                 );
-              }),
-            )}
-          </div>
-        </div>
+              },
+            ),
+        )}
+
+        {showSectorLabels && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 border-l-2 border-zinc-950/90" />
+
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 border-t-2 border-zinc-950/90" />
+          </>
+        )}
       </div>
 
-      {/* INSTRUÇÕES */}
-
-      <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-zinc-800 bg-zinc-900/90 px-4 py-2 text-xs text-zinc-400 shadow-lg">
-        Arraste para mover • Scroll para zoom
-      </div>
-
-      {/* XEQUE */}
-
-      {checkedKings.length > 0 && (
-        <div className="pointer-events-none absolute left-4 top-20 z-20 rounded-lg border border-red-500/50 bg-red-950/90 px-4 py-2 shadow-xl">
-          <p className="text-xs font-black tracking-widest text-red-400">
-            XEQUE
-          </p>
-
-          <p className="mt-1 text-xs text-red-200">
-            {checkedKings.length === 1
-              ? "1 rei ameaçado"
-              : `${checkedKings.length} reis ameaçados`}
-          </p>
+      {game.recoveryPieceId && (
+        <div className="mt-2 rounded-lg border border-cyan-900 bg-cyan-950/50 px-3 py-2 text-center text-xs text-cyan-200">
+          A peça selecionada será recolocada em uma casa inicial vazia.
         </div>
       )}
     </div>

@@ -1,12 +1,15 @@
 import {
+  BoardLayout,
+  BoardSize,
   GameState,
   Piece,
   PieceColor,
   PieceType,
   Position,
+  UnoCard,
 } from "@/types/game";
 
-import { createBoard } from "./board";
+import { createBoard, getBoardSize } from "./board";
 
 import { createUnoDeck, drawUnoCard } from "./uno";
 
@@ -15,7 +18,7 @@ import { getValidMoves } from "./movement";
 import { getKingPositions, isKingInCheck } from "./check";
 
 // ========================================
-// HELPERS
+// BOARD HELPERS
 // ========================================
 
 function cloneBoard(board: GameState["board"]): GameState["board"] {
@@ -31,20 +34,28 @@ function cloneBoard(board: GameState["board"]): GameState["board"] {
   );
 }
 
-function getMovesAllowedFromCard(card: GameState["currentUnoCard"]): number {
+// ========================================
+// UNO HELPERS
+// ========================================
+
+function getMovesAllowedFromCard(card: UnoCard | null): number {
   if (!card) {
     return 1;
   }
 
   switch (card.type) {
     case "number":
-      return card.value ?? 1;
+      return card.value ?? 0;
 
     case "skip":
       return 0;
 
     case "reverse":
+      return 1;
+
     case "draw2":
+      return 1;
+
     case "wildDraw4":
       return 1;
 
@@ -53,7 +64,7 @@ function getMovesAllowedFromCard(card: GameState["currentUnoCard"]): number {
   }
 }
 
-function getRecoveryAmountFromCard(card: GameState["currentUnoCard"]): number {
+function getRecoveryAmountFromCard(card: UnoCard | null): number {
   if (!card) {
     return 0;
   }
@@ -70,27 +81,72 @@ function getRecoveryAmountFromCard(card: GameState["currentUnoCard"]): number {
   }
 }
 
+// ========================================
+// COLOR
+// ========================================
+
 function getOppositeColor(color: PieceColor): PieceColor {
   return color === "white" ? "black" : "white";
 }
 
 // ========================================
-// INITIAL STATE
+// RECOVERY
 // ========================================
 
-export function createInitialGameState(): GameState {
+function getRecoverablePiecesInternal(game: GameState): Piece[] {
+  return game.capturedPieces.filter(
+    (piece) => piece.color === game.currentPlayer,
+  );
+}
+
+function hasRecoverablePieces(game: GameState): boolean {
+  return getRecoverablePiecesInternal(game).length > 0;
+}
+
+// ========================================
+// INITIAL GAME
+// ========================================
+
+export function createInitialGameState(layout: BoardLayout = 3): GameState {
+  const boardSize = getBoardSize(layout);
+
   const deck = createUnoDeck();
 
   const { card, remainingDeck } = drawUnoCard(deck);
 
   const initialCard = card;
 
+  if (initialCard?.type === "skip") {
+    const { card: nextCard, remainingDeck: nextDeck } =
+      drawUnoCard(remainingDeck);
+
+    return createStateFromInitialCard(nextCard, nextDeck, boardSize, layout);
+  }
+
+  return createStateFromInitialCard(
+    initialCard,
+    remainingDeck,
+    boardSize,
+    layout,
+  );
+}
+
+function createStateFromInitialCard(
+  card: UnoCard | null,
+  deck: UnoCard[],
+  boardSize: BoardSize,
+  boardLayout: BoardLayout,
+): GameState {
   return {
-    board: createBoard(),
+    board: createBoard(boardSize),
+
+    boardSize,
+
+    boardLayout,
 
     currentPlayer: "white",
 
-    movesAllowed: getMovesAllowedFromCard(initialCard),
+    movesAllowed: getMovesAllowedFromCard(card),
 
     movesUsed: 0,
 
@@ -98,11 +154,11 @@ export function createInitialGameState(): GameState {
 
     validMoves: [],
 
-    unoDeck: remainingDeck,
+    unoDeck: deck,
 
     unoDiscard: [],
 
-    currentUnoCard: initialCard,
+    currentUnoCard: card,
 
     capturedPieces: [],
 
@@ -110,13 +166,11 @@ export function createInitialGameState(): GameState {
 
     boardReversed: false,
 
-    pendingRecovery: getRecoveryAmountFromCard(initialCard),
+    pendingRecovery: getRecoveryAmountFromCard(card),
 
     recoverySelection: [],
 
     recoveryPieceId: null,
-
-    skipNextTurn: false,
 
     gameOver: false,
 
@@ -127,7 +181,7 @@ export function createInitialGameState(): GameState {
 }
 
 // ========================================
-// MOVE LIMIT
+// MOVEMENT
 // ========================================
 
 function canMakeMove(game: GameState): boolean {
@@ -145,10 +199,6 @@ function canMakeMove(game: GameState): boolean {
 
   return true;
 }
-
-// ========================================
-// SELECTION
-// ========================================
 
 export function selectSquare(game: GameState, position: Position): GameState {
   if (game.gameOver) {
@@ -175,10 +225,6 @@ export function selectSquare(game: GameState, position: Position): GameState {
 
   const piece = square.piece;
 
-  // ======================================
-  // DESELECT
-  // ======================================
-
   if (
     game.selectedSquare &&
     game.selectedSquare.row === position.row &&
@@ -190,10 +236,6 @@ export function selectSquare(game: GameState, position: Position): GameState {
       validMoves: [],
     };
   }
-
-  // ======================================
-  // SELECT OWN PIECE
-  // ======================================
 
   if (piece && piece.color === game.currentPlayer) {
     const validMoves = getValidMoves(
@@ -208,10 +250,6 @@ export function selectSquare(game: GameState, position: Position): GameState {
       validMoves,
     };
   }
-
-  // ======================================
-  // CLICK ON VALID MOVE
-  // ======================================
 
   if (
     game.selectedSquare &&
@@ -230,7 +268,6 @@ export function selectSquare(game: GameState, position: Position): GameState {
 // ========================================
 
 export function movePiece(game: GameState, target: Position): GameState {
-  // Recovery placement has priority.
   if (game.recoveryPieceId) {
     return recoverPieceToSquare(game, target);
   }
@@ -263,11 +300,11 @@ export function movePiece(game: GameState, target: Position): GameState {
 
   const capturedPiece = newBoard[target.row][target.col].piece;
 
-  // ======================================
-  // EN PASSANT CAPTURE
-  // ======================================
-
   let enPassantCapture: Piece | null = null;
+
+  // ========================================
+  // EN PASSANT
+  // ========================================
 
   const isPawn = movingPiece.type === "pawn";
 
@@ -300,17 +337,16 @@ export function movePiece(game: GameState, target: Position): GameState {
     }
   }
 
-  // ======================================
+  // ========================================
   // CASTLING
-  // ======================================
+  // ========================================
 
   if (movingPiece.type === "king" && Math.abs(target.col - source.col) === 2) {
     const direction = target.col > source.col ? 1 : -1;
 
-    const rookSourceCol =
-      direction === 1
-        ? Math.floor(source.col / 8) * 8 + 7
-        : Math.floor(source.col / 8) * 8;
+    const sectorStart = Math.floor(source.col / 8) * 8;
+
+    const rookSourceCol = direction === 1 ? sectorStart + 7 : sectorStart;
 
     const rookTargetCol = target.col - direction;
 
@@ -326,9 +362,9 @@ export function movePiece(game: GameState, target: Position): GameState {
     }
   }
 
-  // ======================================
-  // MOVE PIECE
-  // ======================================
+  // ========================================
+  // MOVIMENTO
+  // ========================================
 
   newBoard[source.row][source.col].piece = null;
 
@@ -337,9 +373,9 @@ export function movePiece(game: GameState, target: Position): GameState {
     hasMoved: true,
   };
 
-  // ======================================
-  // CAPTURE LIST
-  // ======================================
+  // ========================================
+  // CAPTURA
+  // ========================================
 
   const actualCapturedPiece = enPassantCapture ?? capturedPiece;
 
@@ -349,9 +385,9 @@ export function movePiece(game: GameState, target: Position): GameState {
     capturedPieces = [...capturedPieces, actualCapturedPiece];
   }
 
-  // ======================================
+  // ========================================
   // EN PASSANT TARGET
-  // ======================================
+  // ========================================
 
   let nextEnPassantTarget: Position | null = null;
 
@@ -362,11 +398,11 @@ export function movePiece(game: GameState, target: Position): GameState {
     };
   }
 
-  // ======================================
+  // ========================================
   // PROMOTION
-  // ======================================
+  // ========================================
 
-  const promotionRow = movingPiece.color === "white" ? 0 : 23;
+  const promotionRow = movingPiece.color === "white" ? 0 : game.boardSize - 1;
 
   const reachesPromotion =
     movingPiece.type === "pawn" && target.row === promotionRow;
@@ -396,9 +432,9 @@ export function movePiece(game: GameState, target: Position): GameState {
     };
   }
 
-  // ======================================
-  // CHECK GAME OVER
-  // ======================================
+  // ========================================
+  // VITÓRIA
+  // ========================================
 
   const enemyColor = getOppositeColor(movingPiece.color);
 
@@ -455,9 +491,7 @@ export function promotePawn(
 
   return {
     ...game,
-
     board: newBoard,
-
     pendingPromotion: null,
   };
 }
@@ -495,13 +529,13 @@ export function selectRecoveryPiece(
 function isRecoverySquare(game: GameState, position: Position): boolean {
   const { row, col } = position;
 
-  if (row < 0 || row >= 24 || col < 0 || col >= 24) {
+  if (row < 0 || row >= game.boardSize || col < 0 || col >= game.boardSize) {
     return false;
   }
 
   const isStartingRow =
     game.currentPlayer === "white"
-      ? row === 23 || row === 22
+      ? row === game.boardSize - 1 || row === game.boardSize - 2
       : row === 0 || row === 1;
 
   if (!isStartingRow) {
@@ -569,78 +603,98 @@ function recoverPieceToSquare(game: GameState, target: Position): GameState {
 }
 
 // ========================================
-// TURN
+// DRAW NEXT UNO CARD
 // ========================================
 
-export function switchTurn(game: GameState): GameState {
-  if (game.gameOver) {
-    return game;
-  }
-
-  if (game.movesUsed < game.movesAllowed && game.movesAllowed > 0) {
-    return game;
-  }
-
-  if (game.pendingPromotion) {
-    return game;
-  }
-
-  const nextPlayer = getOppositeColor(game.currentPlayer);
-
+function drawNextUnoCard(
+  game: GameState,
+  startingPlayer: PieceColor,
+): GameState {
   let deck = game.unoDeck;
-
-  // ======================================
-  // DECK RECYCLING
-  // ======================================
 
   if (deck.length === 0) {
     deck = createUnoDeck();
   }
 
-  const { card: nextCard, remainingDeck } = drawUnoCard(deck);
+  const { card, remainingDeck } = drawUnoCard(deck);
 
-  if (!nextCard) {
+  if (!card) {
     return {
       ...game,
-      currentPlayer: nextPlayer,
+
+      currentPlayer: startingPlayer,
+
       movesAllowed: 1,
+
       movesUsed: 0,
+
       selectedSquare: null,
+
       validMoves: [],
+
       enPassantTarget: null,
+
       currentUnoCard: null,
+
       pendingRecovery: 0,
+
       recoveryPieceId: null,
     };
   }
 
-  // ======================================
-  // REVERSE
-  // ======================================
-
   const boardReversed =
-    nextCard.type === "reverse" ? !game.boardReversed : game.boardReversed;
+    card.type === "reverse" ? !game.boardReversed : game.boardReversed;
 
-  // ======================================
-  // RECOVERY
-  // ======================================
+  const unoDiscard = game.currentUnoCard
+    ? [...game.unoDiscard, game.currentUnoCard]
+    : game.unoDiscard;
 
-  let nextPendingRecovery = 0;
+  if (card.type === "skip") {
+    const skippedPlayer = startingPlayer;
 
-  if (nextCard.type === "draw2") {
-    nextPendingRecovery = 2;
-  }
+    const nextPlayer = getOppositeColor(skippedPlayer);
 
-  if (nextCard.type === "wildDraw4") {
-    nextPendingRecovery = 4;
+    const skippedGame: GameState = {
+      ...game,
+
+      currentPlayer: nextPlayer,
+
+      movesAllowed: 0,
+
+      movesUsed: 0,
+
+      selectedSquare: null,
+
+      validMoves: [],
+
+      unoDeck: remainingDeck,
+
+      unoDiscard,
+
+      currentUnoCard: card,
+
+      enPassantTarget: null,
+
+      boardReversed,
+
+      pendingRecovery: 0,
+
+      recoverySelection: [],
+
+      recoveryPieceId: null,
+
+      pendingPromotion: null,
+    };
+
+    return drawNextUnoCard(skippedGame, nextPlayer);
   }
 
   return {
     ...game,
 
-    currentPlayer: nextPlayer,
+    currentPlayer: startingPlayer,
 
-    movesAllowed: getMovesAllowedFromCard(nextCard),
+    movesAllowed: getMovesAllowedFromCard(card),
 
     movesUsed: 0,
 
@@ -650,30 +704,56 @@ export function switchTurn(game: GameState): GameState {
 
     unoDeck: remainingDeck,
 
-    unoDiscard: game.currentUnoCard
-      ? [...game.unoDiscard, game.currentUnoCard]
-      : game.unoDiscard,
+    unoDiscard,
 
-    currentUnoCard: nextCard,
+    currentUnoCard: card,
 
     enPassantTarget: null,
 
     boardReversed,
 
-    pendingRecovery: nextPendingRecovery,
+    pendingRecovery: getRecoveryAmountFromCard(card),
 
     recoverySelection: [],
 
     recoveryPieceId: null,
-
-    skipNextTurn: false,
 
     pendingPromotion: null,
   };
 }
 
 // ========================================
-// CHECK HELPERS
+// SWITCH TURN
+// ========================================
+
+export function switchTurn(game: GameState): GameState {
+  if (game.gameOver) {
+    return game;
+  }
+
+  if (game.pendingPromotion) {
+    return game;
+  }
+
+  if (game.movesUsed < game.movesAllowed && game.movesAllowed > 0) {
+    return game;
+  }
+
+  if (
+    game.pendingRecovery > 0 &&
+    hasRecoverablePieces(game) &&
+    game.recoveryPieceId
+  ) {
+    return game;
+  }
+
+  const nextPlayer = getOppositeColor(game.currentPlayer);
+
+  return drawNextUnoCard(game, nextPlayer);
+}
+
+// ========================================
+// CHECK
 // ========================================
 
 export function getCurrentPlayerKingsInCheck(game: GameState): Position[] {
@@ -683,15 +763,17 @@ export function getCurrentPlayerKingsInCheck(game: GameState): Position[] {
 }
 
 // ========================================
-// RECOVERY INFO
+// RECOVERY HELPERS
 // ========================================
 
 export function getRecoverablePieces(game: GameState): Piece[] {
+  return getRecoverablePiecesInternal(game);
+}
+
+export function canPassRecovery(game: GameState): boolean {
   if (game.pendingRecovery <= 0) {
-    return [];
+    return true;
   }
 
-  return game.capturedPieces.filter(
-    (piece) => piece.color === game.currentPlayer,
-  );
+  return !hasRecoverablePieces(game);
 }

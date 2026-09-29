@@ -42,8 +42,23 @@ export interface UnoCard {
   recoveryAmount: number;
 }
 
+// ========================================
+// BOARD SIZE
+// ========================================
+
+export type BoardSize = 8 | 16 | 24;
+
+export type BoardLayout = 1 | 2 | 3;
+
+// ========================================
+// GAME STATE
+// ========================================
+
 export interface GameState {
   board: Square[][];
+
+  boardSize: BoardSize;
+  boardLayout: BoardLayout;
 
   currentPlayer: PieceColor;
 
@@ -68,8 +83,6 @@ export interface GameState {
   recoverySelection: Piece[];
 
   recoveryPieceId: string | null;
-
-  skipNextTurn: boolean;
 
   gameOver: boolean;
   winner: PieceColor | null;
