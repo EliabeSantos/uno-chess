@@ -10,6 +10,7 @@ import {
   createInitialGameState,
   movePiece,
   promotePawn,
+  selectRecoveryPiece,
   selectSquare,
   switchTurn,
 } from "@/game/gameState";
@@ -29,16 +30,37 @@ export default function Home() {
         return currentGame;
       }
 
+      // ==================================
+      // RECOVERY MODE
+      // ==================================
+
+      if (currentGame.recoveryPieceId) {
+        return movePiece(currentGame, position);
+      }
+
+      // ==================================
+      // NORMAL MOVE
+      // ==================================
+
       if (currentGame.selectedSquare) {
         const movedGame = movePiece(currentGame, position);
 
-        if (movedGame.movesUsed !== currentGame.movesUsed) {
+        if (
+          movedGame.movesUsed !== currentGame.movesUsed ||
+          movedGame.capturedPieces.length !==
+            currentGame.capturedPieces.length ||
+          movedGame.pendingPromotion !== currentGame.pendingPromotion
+        ) {
           return movedGame;
         }
       }
 
       return selectSquare(currentGame, position);
     });
+  }
+
+  function handleRecoveryPiece(pieceId: string) {
+    setGame((currentGame) => selectRecoveryPiece(currentGame, pieceId));
   }
 
   function handlePromotion(type: Exclude<PieceType, "king" | "pawn">) {
@@ -70,7 +92,11 @@ export default function Home() {
             )}
           </div>
 
-          <GameUI game={game} onEndTurn={handleEndTurn} />
+          <GameUI
+            game={game}
+            onEndTurn={handleEndTurn}
+            onRecoveryPiece={handleRecoveryPiece}
+          />
         </div>
       </div>
     </main>

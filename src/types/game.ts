@@ -32,24 +32,15 @@ export interface Square {
 
 export type UnoColor = "red" | "yellow" | "green" | "blue";
 
-export type UnoCardType =
-  | "number"
-  | "skip"
-  | "reverse"
-  | "draw2"
-  | "wild"
-  | "wildDraw4";
+export type UnoCardType = "number" | "skip" | "reverse" | "draw2" | "wildDraw4";
 
 export interface UnoCard {
   id: string;
   color: UnoColor | null;
   type: UnoCardType;
   value: number | null;
+  recoveryAmount: number;
 }
-
-// ========================================
-// GAME STATE
-// ========================================
 
 export interface GameState {
   board: Square[][];
@@ -67,6 +58,18 @@ export interface GameState {
   currentUnoCard: UnoCard | null;
 
   capturedPieces: Piece[];
+
+  enPassantTarget: Position | null;
+
+  boardReversed: boolean;
+
+  pendingRecovery: number;
+
+  recoverySelection: Piece[];
+
+  recoveryPieceId: string | null;
+
+  skipNextTurn: boolean;
 
   gameOver: boolean;
   winner: PieceColor | null;
