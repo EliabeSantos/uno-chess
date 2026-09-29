@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Piece, Position } from "@/types/game";
 
 interface ChessSquareProps {
@@ -13,23 +14,23 @@ interface ChessSquareProps {
   onClick: (position: Position) => void;
 }
 
-const pieceSymbols: Record<Piece["color"], Record<Piece["type"], string>> = {
+const pieceImages: Record<Piece["color"], Record<Piece["type"], string>> = {
   white: {
-    king: "♔",
-    queen: "♕",
-    rook: "♖",
-    bishop: "♗",
-    knight: "♘",
-    pawn: "♙",
+    king: "/pieces/Rei.png",
+    queen: "/pieces/Rainha.png",
+    rook: "/pieces/Torre.png",
+    bishop: "/pieces/Bispo.png",
+    knight: "/pieces/Cavalo.png",
+    pawn: "/pieces/Peao.png",
   },
 
   black: {
-    king: "♚",
-    queen: "♛",
-    rook: "♜",
-    bishop: "♝",
-    knight: "♞",
-    pawn: "♟",
+    king: "/pieces/Rei p.png",
+    queen: "/pieces/Rainha p.png",
+    rook: "/pieces/Torre p.png",
+    bishop: "/pieces/Bispo p.png",
+    knight: "/pieces/Cavalo p.png",
+    pawn: "/pieces/Peao p.png",
   },
 };
 
@@ -44,6 +45,8 @@ export default function ChessSquare({
   onClick,
 }: ChessSquareProps) {
   const isDark = (row + col) % 2 === 1;
+
+  const pieceImage = piece ? pieceImages[piece.color][piece.type] : null;
 
   return (
     <button
@@ -98,21 +101,28 @@ export default function ChessSquare({
       {/* PIECE */}
       {/* ================================= */}
 
-      {piece && (
+      {piece && pieceImage && (
         <span
           className={`
+            relative
+            flex
+            h-[88%]
+            w-[88%]
+            items-center
+            justify-center
             select-none
-            text-[clamp(0.5rem,2vw,2rem)]
-            leading-none
-            ${
-              piece.color === "white"
-                ? "text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)]"
-                : "text-zinc-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)]"
-            }
+            transition-transform
             ${inCheck ? "scale-110" : ""}
           `}
         >
-          {pieceSymbols[piece.color][piece.type]}
+          <Image
+            src={pieceImage}
+            alt={`${piece.color} ${piece.type}`}
+            fill
+            sizes="(max-width: 768px) 10vw, 5vw"
+            className="object-contain"
+            draggable={false}
+          />
         </span>
       )}
     </button>

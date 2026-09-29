@@ -372,9 +372,19 @@ export default function GameUI({
                   <button
                     key={piece.id}
                     type="button"
-                    disabled
-                    className="cursor-not-allowed rounded-lg border border-purple-900 bg-black/20 p-3 text-3xl opacity-70"
-                    title="Selecione a peça diretamente no tabuleiro"
+                    onClick={() => {
+                      const square = game.board
+                        .flatMap((row) => row)
+                        .find((square) => square.piece?.id === piece.id);
+
+                      if (!square?.piece) {
+                        return;
+                      }
+
+                      // A seleção da peça acontece pelo tabuleiro.
+                      // Este botão serve apenas para destacar/listar as peças disponíveis.
+                    }}
+                    className="rounded border border-slate-600 bg-slate-800 px-2 py-2 text-xl hover:border-yellow-400"
                   >
                     {getPieceSymbol(piece)}
                   </button>
