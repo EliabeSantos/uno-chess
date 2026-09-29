@@ -133,7 +133,7 @@ export default function GameUI({
     .flat()
     .map((square) => square.piece)
     .filter(
-      (piece): piece is Piece =>
+      (piece: any): piece is Piece =>
         Boolean(piece) &&
         piece.color === game.currentPlayer &&
         piece.type !== "king",
