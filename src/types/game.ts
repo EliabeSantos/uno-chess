@@ -81,6 +81,7 @@ export interface GameState {
    * uma peça própria para realizar a troca.
    */
   pendingColorSwap: boolean;
+  colorSwapAvailable: boolean;
 
   /*
    * Posição da peça inimiga escolhida automaticamente

@@ -94,7 +94,19 @@ export default function GameUI({
 
   const recoveryUnavailable = game.pendingRecovery > 0 && !hasRecoverablePieces;
 
-  const colorSwapFinished = !game.pendingColorSwap;
+  /*
+   * Troca de Cor:
+   *
+   * pendingColorSwap = true + target existe
+   *   -> jogador precisa escolher uma peça.
+   *
+   * pendingColorSwap = true + target não existe
+   *   -> não há peça elegível; jogador pode passar o turno.
+   */
+  const colorSwapNoTarget =
+    game.pendingColorSwap && game.colorSwapTarget === null;
+
+  const colorSwapFinished = !game.pendingColorSwap || colorSwapNoTarget;
 
   const canEndTurn =
     movementFinished &&
@@ -280,6 +292,7 @@ export default function GameUI({
         {/* ================================== */}
 
         {unoCard?.type === "colorSwap" &&
+          game.colorSwapAvailable &&
           !game.pendingColorSwap &&
           !game.gameOver && (
             <button
@@ -302,66 +315,77 @@ export default function GameUI({
             TROCA DE COR
           </p>
 
-          <p className="mt-2 text-sm text-purple-200">
-            Escolha uma peça sua para trocar com a peça inimiga mais avançada
-            que você consegue enxergar.
-          </p>
+          {colorSwapNoTarget ? (
+            <>
+              <div className="mt-3 rounded-xl border border-yellow-500/30 bg-yellow-950/30 p-4 text-center">
+                <div className="text-3xl">⚠</div>
 
-          {game.colorSwapTarget && (
-            <div className="mt-3 rounded-xl bg-black/30 p-3 text-center">
-              <p className="text-xs font-bold text-zinc-500">ALVO</p>
+                <p className="mt-2 font-black text-yellow-300">
+                  NENHUMA PEÇA DISPONÍVEL
+                </p>
 
-              <p className="mt-1 text-5xl">
-                {(() => {
-                  const piece =
-                    game.board[game.colorSwapTarget!.row][
-                      game.colorSwapTarget!.col
-                    ].piece;
+                <p className="mt-2 text-sm text-yellow-200/70">
+                  Nenhuma peça inimiga elegível foi encontrada dentro da sua
+                  visão.
+                </p>
+              </div>
 
-                  return piece ? getPieceSymbol(piece) : "?";
-                })()}
-              </p>
-
-              <p className="mt-2 text-xs text-zinc-500">
-                Escolha uma peça abaixo ou clique nela no tabuleiro.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {ownPieces.map((piece) => (
               <button
-                key={piece.id}
                 type="button"
-                onClick={() => {
-                  /*
-                   * A seleção pelo painel é feita
-                   * através do mesmo mecanismo usado
-                   * pelo tabuleiro.
-                   */
-                  const position = game.board
-                    .flatMap((row) => row)
-                    .find((square) => square.piece?.id === piece.id);
-
-                  if (!position) {
-                    return;
-                  }
-
-                  /*
-                   * Este callback é tratado pelo
-                   * page.tsx.
-                   */
-                }}
-                className="rounded-lg border border-purple-900 bg-black/20 p-3 text-3xl transition hover:border-purple-400 hover:bg-purple-500/20"
+                onClick={onEndTurn}
+                disabled={game.gameOver}
+                className="mt-4 w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-black transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {getPieceSymbol(piece)}
+                PASSAR TURNO
               </button>
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-purple-200">
+                Escolha uma peça sua para trocar com a peça inimiga mais
+                avançada que você consegue enxergar.
+              </p>
 
-          <p className="mt-3 text-center text-xs font-bold text-purple-300">
-            Clique na peça desejada no tabuleiro para realizar a troca.
-          </p>
+              {game.colorSwapTarget && (
+                <div className="mt-3 rounded-xl bg-black/30 p-3 text-center">
+                  <p className="text-xs font-bold text-zinc-500">ALVO</p>
+
+                  <p className="mt-1 text-5xl">
+                    {(() => {
+                      const piece =
+                        game.board[game.colorSwapTarget.row][
+                          game.colorSwapTarget.col
+                        ].piece;
+
+                      return piece ? getPieceSymbol(piece) : "?";
+                    })()}
+                  </p>
+
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Escolha uma peça abaixo ou clique nela no tabuleiro.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {ownPieces.map((piece) => (
+                  <button
+                    key={piece.id}
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-lg border border-purple-900 bg-black/20 p-3 text-3xl opacity-70"
+                    title="Selecione a peça diretamente no tabuleiro"
+                  >
+                    {getPieceSymbol(piece)}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-3 text-center text-xs font-bold text-purple-300">
+                Clique na peça desejada no tabuleiro para realizar a troca.
+              </p>
+            </>
+          )}
         </section>
       )}
 
@@ -421,17 +445,17 @@ export default function GameUI({
                       type="button"
                       onClick={() => onRecoveryPiece(piece.id)}
                       className={`
-                          rounded-lg
-                          border
-                          p-2
-                          text-2xl
-                          transition
-                          ${
-                            selected
-                              ? "border-cyan-300 bg-cyan-500/30"
-                              : "border-cyan-900 bg-black/20 hover:border-cyan-500"
-                          }
-                        `}
+                        rounded-lg
+                        border
+                        p-2
+                        text-2xl
+                        transition
+                        ${
+                          selected
+                            ? "border-cyan-300 bg-cyan-500/30"
+                            : "border-cyan-900 bg-black/20 hover:border-cyan-500"
+                        }
+                      `}
                     >
                       {getPieceSymbol(piece)}
                     </button>
@@ -489,14 +513,16 @@ export default function GameUI({
       {/* ENCERRAR TURNO */}
       {/* ================================== */}
 
-      <button
-        type="button"
-        onClick={onEndTurn}
-        disabled={!canEndTurn || Boolean(game.recoveryPieceId)}
-        className="w-full rounded-xl bg-white px-4 py-3 font-black text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {recoveryUnavailable ? "PASSAR TURNO" : "ENCERRAR TURNO"}
-      </button>
+      {!colorSwapNoTarget && (
+        <button
+          type="button"
+          onClick={onEndTurn}
+          disabled={!canEndTurn || Boolean(game.recoveryPieceId)}
+          className="w-full rounded-xl bg-white px-4 py-3 font-black text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {recoveryUnavailable ? "PASSAR TURNO" : "ENCERRAR TURNO"}
+        </button>
+      )}
 
       {/* ================================== */}
       {/* GAME OVER */}

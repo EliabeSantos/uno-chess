@@ -177,9 +177,18 @@ function createStateFromInitialCard(
 
     recoveryPieceId: null,
 
-    pendingColorSwap: card?.type === "colorSwap",
+    /*
+     * A carta não começa automaticamente ativada.
+     */
+    pendingColorSwap: false,
 
     colorSwapTarget: null,
+
+    /*
+     * A carta só pode ser ativada se a carta atual
+     * realmente for uma Troca de Cor.
+     */
+    colorSwapAvailable: card?.type === "colorSwap",
 
     gameOver: false,
 
@@ -623,10 +632,6 @@ function recoverPieceToSquare(game: GameState, target: Position): GameState {
 // COLOR SWAP
 // ========================================
 
-function isPositionEqual(a: Position, b: Position): boolean {
-  return a.row === b.row && a.col === b.col;
-}
-
 /**
  * Determina qual peça inimiga é a mais avançada.
  *
@@ -666,7 +671,7 @@ function findMostAdvancedEnemyPiece(game: GameState): Position | null {
         continue;
       }
 
-      const position = {
+      const position: Position = {
         row,
         col,
       };
@@ -695,7 +700,14 @@ function findMostAdvancedEnemyPiece(game: GameState): Position | null {
 /**
  * Ativa a carta Troca de Cor.
  *
- * A peça inimiga é identificada automaticamente.
+ * Se existir uma peça inimiga elegível e visível,
+ * o jogador deverá escolher uma peça própria para
+ * realizar a troca.
+ *
+ * Se não existir nenhuma peça inimiga elegível,
+ * a Troca de Cor entra em estado pendente sem alvo.
+ *
+ * Nesse caso o GameUI permite PASSAR TURNO.
  */
 export function activateColorSwap(game: GameState): GameState {
   if (game.gameOver) {
@@ -706,14 +718,41 @@ export function activateColorSwap(game: GameState): GameState {
     return game;
   }
 
+  if (!game.colorSwapAvailable) {
+    return game;
+  }
+
   if (game.pendingColorSwap) {
     return game;
   }
 
   const target = findMostAdvancedEnemyPiece(game);
 
+  /*
+   * Nenhuma peça válida encontrada.
+   *
+   * Mantemos pendingColorSwap como true,
+   * mas sem alvo.
+   *
+   * Isso permite que a UI mostre:
+   *
+   * "Nenhuma peça disponível"
+   * [PASSAR TURNO]
+   */
   if (!target) {
-    return game;
+    return {
+      ...game,
+
+      pendingColorSwap: true,
+
+      colorSwapTarget: null,
+
+      colorSwapAvailable: false,
+
+      selectedSquare: null,
+
+      validMoves: [],
+    };
   }
 
   return {
@@ -722,6 +761,8 @@ export function activateColorSwap(game: GameState): GameState {
     pendingColorSwap: true,
 
     colorSwapTarget: target,
+
+    colorSwapAvailable: false,
 
     selectedSquare: null,
 
@@ -741,11 +782,14 @@ export function selectColorSwapPiece(
     return game;
   }
 
+  /*
+   * Não existe alvo.
+   *
+   * Nesse caso o jogador deve usar
+   * o botão PASSAR TURNO da interface.
+   */
   if (!game.colorSwapTarget) {
-    return {
-      ...game,
-      pendingColorSwap: false,
-    };
+    return game;
   }
 
   const selectedPiece = game.board[position.row]?.[position.col]?.piece;
@@ -759,8 +803,7 @@ export function selectColorSwapPiece(
   }
 
   /*
-   * O alvo da troca nunca pode ser o próprio Rei,
-   * e a peça escolhida também não pode ser o Rei.
+   * O Rei nunca pode participar da troca.
    */
   if (selectedPiece.type === "king") {
     return game;
@@ -791,11 +834,24 @@ function executeColorSwap(
     return game;
   }
 
+  /*
+   * O alvo desapareceu antes da troca.
+   *
+   * Cancela o estado pendente para evitar softlock.
+   */
   if (!enemyPiece) {
     return {
       ...game,
+
       pendingColorSwap: false,
+
       colorSwapTarget: null,
+
+      colorSwapAvailable: false,
+
+      selectedSquare: null,
+
+      validMoves: [],
     };
   }
 
@@ -813,12 +869,24 @@ function executeColorSwap(
 
   const newBoard = cloneBoard(game.board);
 
+  /*
+   * A peça inimiga vai para a posição da peça própria.
+   *
+   * hasMoved = true evita que uma peça trocada
+   * ganhe privilégios de primeiro movimento,
+   * como roque ou avanço duplo de peão.
+   */
   newBoard[ownPiecePosition.row][ownPiecePosition.col].piece = {
     ...enemyPiece,
+    hasMoved: true,
   };
 
+  /*
+   * A peça própria vai para a posição do inimigo.
+   */
   newBoard[target.row][target.col].piece = {
     ...ownPiece,
+    hasMoved: true,
   };
 
   const nextGame: GameState = {
@@ -830,14 +898,15 @@ function executeColorSwap(
 
     colorSwapTarget: null,
 
+    colorSwapAvailable: false,
+
     selectedSquare: null,
 
     validMoves: [],
   };
 
   /*
-   * A troca pode colocar um Rei adversário em
-   * situação diferente, mas não move Reis.
+   * A troca não captura nenhuma peça.
    *
    * Vitória continua sendo baseada na existência
    * dos três Reis.
@@ -849,7 +918,9 @@ function executeColorSwap(
   if (enemyKings.length === 0) {
     return {
       ...nextGame,
+
       gameOver: true,
+
       winner: game.currentPlayer,
     };
   }
@@ -898,6 +969,8 @@ function drawNextUnoCard(
       pendingColorSwap: false,
 
       colorSwapTarget: null,
+
+      colorSwapAvailable: false,
     };
   }
 
@@ -946,6 +1019,8 @@ function drawNextUnoCard(
 
       colorSwapTarget: null,
 
+      colorSwapAvailable: false,
+
       pendingPromotion: null,
     };
 
@@ -985,6 +1060,11 @@ function drawNextUnoCard(
 
     colorSwapTarget: null,
 
+    /*
+     * Uma nova carta Troca de Cor pode ser ativada.
+     */
+    colorSwapAvailable: card.type === "colorSwap",
+
     pendingPromotion: null,
   };
 }
@@ -998,18 +1078,73 @@ export function switchTurn(game: GameState): GameState {
     return game;
   }
 
-  if (game.pendingPromotion) {
-    return game;
+  /*
+   * TROCA DE COR SEM ALVO
+   *
+   * A carta foi ativada, mas nenhuma peça inimiga
+   * elegível/visível foi encontrada.
+   *
+   * Nesse caso o jogador pode passar o turno.
+   *
+   * drawNextUnoCard também garante que a carta atual
+   * seja descartada e uma nova carta seja distribuída.
+   */
+  if (game.pendingColorSwap && !game.colorSwapTarget) {
+    const nextPlayer = getOppositeColor(game.currentPlayer);
+
+    return drawNextUnoCard(
+      {
+        ...game,
+
+        pendingColorSwap: false,
+
+        colorSwapTarget: null,
+
+        colorSwapAvailable: false,
+
+        selectedSquare: null,
+
+        validMoves: [],
+
+        movesUsed: 0,
+      },
+      nextPlayer,
+    );
   }
 
+  /*
+   * Existe uma Troca de Cor válida aguardando
+   * o jogador escolher uma peça.
+   *
+   * Não permite encerrar o turno.
+   */
   if (game.pendingColorSwap) {
     return game;
   }
 
+  /*
+   * Promoção precisa ser resolvida antes
+   * de trocar o turno.
+   */
+  if (game.pendingPromotion) {
+    return game;
+  }
+
+  /*
+   * Ainda existem movimentos disponíveis.
+   */
   if (game.movesUsed < game.movesAllowed && game.movesAllowed > 0) {
     return game;
   }
 
+  /*
+   * Se existe recuperação pendente e há peças
+   * recuperáveis, o jogador precisa escolher
+   * uma peça antes de encerrar o turno.
+   *
+   * Se não existem peças recuperáveis,
+   * o turno pode continuar normalmente.
+   */
   if (
     game.pendingRecovery > 0 &&
     hasRecoverablePieces(game) &&

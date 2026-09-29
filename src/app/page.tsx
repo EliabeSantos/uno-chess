@@ -7,6 +7,7 @@ import GameUI from "@/components/GameUI";
 import PromotionModal from "@/components/PromotionModal";
 
 import {
+  activateColorSwap,
   createInitialGameState,
   movePiece,
   promotePawn,
@@ -383,7 +384,16 @@ export default function Home() {
       setGame(nextGame);
     }
   }
+
   const handleActivateColorSwap = () => {
+    if (!game) {
+      return;
+    }
+
+    if (mode === "online" && !canOnlinePlayerAct()) {
+      return;
+    }
+
     const nextGame = activateColorSwap(game);
 
     if (nextGame === game) {
@@ -392,10 +402,11 @@ export default function Home() {
 
     setGame(nextGame);
 
-    if (online && room) {
+    if (mode === "online" && room) {
       void updateGameRoomState(room.id, nextGame);
     }
   };
+
   function handlePromotion(type: Exclude<PieceType, "king" | "pawn">) {
     if (!game) {
       return;
