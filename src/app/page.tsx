@@ -663,7 +663,11 @@ export default function Home() {
 
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
           <div className="relative">
-            <ChessBoard game={game} onSquareClick={handleSquareClick} />
+            <ChessBoard
+              game={game}
+              playerColor={onlineColor ?? game.currentPlayer}
+              onSquareClick={handleSquareClick}
+            />
 
             {game.pendingPromotion && (
               <PromotionModal
