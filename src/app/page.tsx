@@ -4,37 +4,45 @@ import { useState } from "react";
 
 import ChessBoard from "@/components/ChessBoard";
 import GameUI from "@/components/GameUI";
+import PromotionModal from "@/components/PromotionModal";
 
 import {
   createInitialGameState,
   movePiece,
+  promotePawn,
   selectSquare,
   switchTurn,
 } from "@/game/gameState";
 
-import { GameState, Position } from "@/types/game";
+import { GameState, PieceType, Position } from "@/types/game";
 
 export default function Home() {
   const [game, setGame] = useState<GameState>(createInitialGameState());
 
   function handleSquareClick(position: Position) {
     setGame((currentGame) => {
-      // Se já existe uma peça selecionada,
-      // tentamos realizar o movimento.
+      if (currentGame.gameOver) {
+        return currentGame;
+      }
+
+      if (currentGame.pendingPromotion) {
+        return currentGame;
+      }
+
       if (currentGame.selectedSquare) {
         const movedGame = movePiece(currentGame, position);
 
-        // Se o movimento realmente aconteceu,
-        // movePiece terá aumentado movesUsed.
         if (movedGame.movesUsed !== currentGame.movesUsed) {
           return movedGame;
         }
       }
 
-      // Caso contrário, tenta selecionar
-      // uma peça.
       return selectSquare(currentGame, position);
     });
+  }
+
+  function handlePromotion(type: Exclude<PieceType, "king" | "pawn">) {
+    setGame((currentGame) => promotePawn(currentGame, type));
   }
 
   function handleEndTurn() {
@@ -51,7 +59,16 @@ export default function Home() {
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-          <ChessBoard game={game} onSquareClick={handleSquareClick} />
+          <div className="relative">
+            <ChessBoard game={game} onSquareClick={handleSquareClick} />
+
+            {game.pendingPromotion && (
+              <PromotionModal
+                color={game.currentPlayer}
+                onSelect={handlePromotion}
+              />
+            )}
+          </div>
 
           <GameUI game={game} onEndTurn={handleEndTurn} />
         </div>

@@ -1,4 +1,10 @@
-import { GameState, Piece, PieceColor, Position } from "@/types/game";
+import {
+  GameState,
+  Piece,
+  PieceColor,
+  PieceType,
+  Position,
+} from "@/types/game";
 
 import { createBoard } from "./board";
 import { getValidMoves } from "./movement";
@@ -40,6 +46,8 @@ export function createInitialGameState(): GameState {
     gameOver: false,
 
     winner: null,
+
+    pendingPromotion: null,
   };
 }
 
@@ -49,6 +57,10 @@ export function getRemainingMoves(game: GameState): number {
 
 export function canMakeMove(game: GameState): boolean {
   if (game.gameOver) {
+    return false;
+  }
+
+  if (game.pendingPromotion) {
     return false;
   }
 
@@ -89,23 +101,12 @@ export function getWinner(game: GameState): PieceColor | null {
   return null;
 }
 
-function promotePawn(piece: Piece, targetRow: number): Piece {
-  const isWhitePromotion = piece.color === "white" && targetRow === 0;
-
-  const isBlackPromotion = piece.color === "black" && targetRow === 23;
-
-  if (!isWhitePromotion && !isBlackPromotion) {
-    return piece;
-  }
-
-  return {
-    ...piece,
-    type: "queen",
-  };
-}
-
 export function selectSquare(game: GameState, position: Position): GameState {
   if (game.gameOver) {
+    return game;
+  }
+
+  if (game.pendingPromotion) {
     return game;
   }
 
@@ -142,6 +143,10 @@ export function selectSquare(game: GameState, position: Position): GameState {
 
 export function movePiece(game: GameState, target: Position): GameState {
   if (game.gameOver) {
+    return game;
+  }
+
+  if (game.pendingPromotion) {
     return game;
   }
 
@@ -184,13 +189,11 @@ export function movePiece(game: GameState, target: Position): GameState {
 
   const capturedPiece: Piece | null = newBoard[target.row][target.col].piece;
 
-  const movedPiece: Piece = promotePawn(
-    {
-      ...movingPiece,
-      hasMoved: true,
-    },
-    target.row,
-  );
+  const movedPiece: Piece = {
+    ...movingPiece,
+
+    hasMoved: true,
+  };
 
   newBoard[target.row][target.col].piece = movedPiece;
 
@@ -201,6 +204,18 @@ export function movePiece(game: GameState, target: Position): GameState {
     : game.capturedPieces;
 
   const newMovesUsed: number = game.movesUsed + 1;
+
+  const isWhitePromotion =
+    movedPiece.type === "pawn" &&
+    movedPiece.color === "white" &&
+    target.row === 0;
+
+  const isBlackPromotion =
+    movedPiece.type === "pawn" &&
+    movedPiece.color === "black" &&
+    target.row === 23;
+
+  const needsPromotion = isWhitePromotion || isBlackPromotion;
 
   const temporaryGame: GameState = {
     ...game,
@@ -214,6 +229,8 @@ export function movePiece(game: GameState, target: Position): GameState {
     validMoves: [],
 
     capturedPieces,
+
+    pendingPromotion: needsPromotion ? target : null,
   };
 
   const winner: PieceColor | null = getWinner(temporaryGame);
@@ -227,8 +244,78 @@ export function movePiece(game: GameState, target: Position): GameState {
   };
 }
 
+export function promotePawn(
+  game: GameState,
+  newType: Exclude<PieceType, "king" | "pawn">,
+): GameState {
+  if (game.gameOver) {
+    return game;
+  }
+
+  if (!game.pendingPromotion) {
+    return game;
+  }
+
+  const { row, col } = game.pendingPromotion;
+
+  const square = game.board[row]?.[col];
+
+  if (!square) {
+    return game;
+  }
+
+  const piece = square.piece;
+
+  if (!piece) {
+    return game;
+  }
+
+  if (piece.type !== "pawn") {
+    return {
+      ...game,
+
+      pendingPromotion: null,
+    };
+  }
+
+  const promotedPiece: Piece = {
+    ...piece,
+
+    type: newType,
+
+    hasMoved: true,
+  };
+
+  const newBoard: GameState["board"] = game.board.map(
+    (boardRow: GameState["board"][number]) =>
+      boardRow.map((boardSquare) => ({
+        ...boardSquare,
+
+        piece: boardSquare.piece
+          ? {
+              ...boardSquare.piece,
+            }
+          : null,
+      })),
+  );
+
+  newBoard[row][col].piece = promotedPiece;
+
+  return {
+    ...game,
+
+    board: newBoard,
+
+    pendingPromotion: null,
+  };
+}
+
 export function switchTurn(game: GameState): GameState {
   if (game.gameOver) {
+    return game;
+  }
+
+  if (game.pendingPromotion) {
     return game;
   }
 
@@ -277,5 +364,7 @@ export function switchTurn(game: GameState): GameState {
     unoDiscard: discard,
 
     currentUnoCard: card,
+
+    pendingPromotion: null,
   };
 }

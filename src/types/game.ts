@@ -70,4 +70,6 @@ export interface GameState {
 
   gameOver: boolean;
   winner: PieceColor | null;
+
+  pendingPromotion: Position | null;
 }
