@@ -26,8 +26,34 @@ export interface Square {
   piece: Piece | null;
 }
 
+// ========================================
+// UNO
+// ========================================
+
+export type UnoColor = "red" | "yellow" | "green" | "blue";
+
+export type UnoCardType =
+  | "number"
+  | "skip"
+  | "reverse"
+  | "draw2"
+  | "wild"
+  | "wildDraw4";
+
+export interface UnoCard {
+  id: string;
+  color: UnoColor | null;
+  type: UnoCardType;
+  value: number | null;
+}
+
+// ========================================
+// GAME STATE
+// ========================================
+
 export interface GameState {
   board: Square[][];
+
   currentPlayer: PieceColor;
 
   movesAllowed: number;
